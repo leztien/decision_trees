@@ -1,4 +1,4 @@
-def make_data(m=100, n=3, balanced=True, seed=None):
+def make_data(m=100, n=3, make_identical_observations_consistent=False, balanced=True, seed=None):
     import numpy as np
     """make binary data for a binary Decision Tree Classifier"""
     #random seed
@@ -25,8 +25,10 @@ def make_data(m=100, n=3, balanced=True, seed=None):
 
     X = func(X)
 
+
+    
     #f!ck up a certain proportion of each feature by reversing the boolean value in a coresponding cell
-    high = (1/n)**3  # maximum allowed proportion to be mangled (the lower n the higher this proportion)
+    high = (1/n)**2  # maximum allowed proportion to be mangled (the lower n the higher this proportion)
     pp = np.random.uniform(low=0, high=high, size=n)  # proportion of each feature to be mangled
     g = (np.random.permutation(m)[:int(m*p)] for p in pp)
     for j,nx in enumerate(g):
@@ -40,6 +42,18 @@ def make_data(m=100, n=3, balanced=True, seed=None):
     threshold = 0.5 if balanced is True else np.random.uniform(lower, 0.99)
     q = np.quantile(y, q=threshold)
     y = (y >= q).astype('uint8')
+    
+    if make_identical_observations_consistent:
+        def make_consistent(X,y):
+            """make an unsplittable (degenerate) dataset splittable by assigning a mode label to all identical observations"""
+            from scipy.stats import mode
+            unique_observations = frozenset(tuple(x) for x in X)
+            masks = [[tuple(x) == unique for x in X] for unique in unique_observations] 
+            for mask in masks:
+                y[mask] = mode(y[mask]).mode[0]
+            return(y)
+        y = make_consistent(Xoriginal,y)
+    #return X,y
     return(Xoriginal,y)
 
 #######################################################################
@@ -117,11 +131,12 @@ class Tree:
         for j in features:
             G = Gini(nx,j)
             Ginis.append((j,G))
-
         G = sorted(Ginis, key=(lambda t:t[-1]))[0]   # best Gini
-
-        if g <= G[-1] * (1+1E-10):    #  * (1+1E-10)  prevents a bug. IDK wether it is the correct solution
-            #base case
+        
+        #base case:
+        base_case_condition = g <= G[-1] * (1+1E-10)
+        if base_case_condition:    #  * (1+1E-10)  prevents a bug. IDK wether it is the correct solution
+            print(g, cc, len(nx))
             leaf = Leaf(predicted_class=np.array(cc).argmax())
             leaf._node_number = self._nodes_counter
             self._nodes_counter += 1
@@ -133,7 +148,6 @@ class Tree:
             thisnode = Node(rule=j)
             thisnode._node_number = self._nodes_counter
             self._nodes_counter += 1
-
             next_nodes = [self.add_node(nx[self.X[nx,j]==k], previous_node_rule=thisnode.rule) for k in self.classes]
             thisnode.next_nodes = next_nodes  # note the order - for indexing puropses
 
@@ -146,23 +160,15 @@ class Tree:
             self.graph.append('{} [color="black", fillcolor="orange", style="filled", fontsize=10, label="{}"]'.format(thisnode._node_number, txt))
             return thisnode
 
-
-
 #############################################################################
 
-
-X,y = make_data(m=200, n=5, balanced=True, seed=True)  #285  700,331,48=causes error
+X,y = make_data(m=300, n=10, make_identical_observations_consistent=True, 
+                balanced=True, seed=True)  
 
 tree = Tree().fit(X,y)
-
-ypred = [tree.root.forward(x) for x in X]
-
 ypred = tree.predict(X)
-
 acc = np.equal(y, ypred).mean()
-print(acc)
-
-print(tree._nodes_counter)
+print("accuracy =", acc, "\tnumber of nodes =", tree._nodes_counter)
 
 
 #graphviz
@@ -172,3 +178,10 @@ except: print("Unable to import graphviz")
 else:
     graph = Source(string, filename="image", format="png")
     graph.view()
+
+
+
+from sklearn.tree import DecisionTreeClassifier
+md = DecisionTreeClassifier().fit(X,y)
+acc = md.score(X,y)
+print("sklearn acc", acc)
