@@ -13,18 +13,17 @@ def make_data(m=500, n=5, k=3, seed=None):
         seed = __import__("random").randint(0, 1000)
         print("seed =", seed)
     if seed:
-        np.random.seed(int(seed))
-    X = np.random.normal(loc=0, scale=1, size=(m,n))
-    sigmas = np.random.uniform(1,10, size=n)
+        rs = np.random.RandomState(int(seed))
+    X = rs.normal(loc=0, scale=1, size=(m,n))
+    sigmas = rs.uniform(1,10, size=n)
     X *= sigmas
     X -= X.min(0)
     clips = np.quantile(X, q=np.linspace(0,0.05, num=n), axis=0)
     X = np.clip(X, clips.diagonal(), X.max(0))
-    weights = np.random.uniform(-1, 1, size=n)
+    weights = (rs.randn(n) * 10) ** (n+k)
     y = (X * weights).sum(1)
     y = (y - y.mean()) / y.std(ddof=0)
-    errors = np.random.normal(loc=0, scale=0.0001, size=m)
-    y += errors
+    y += rs.normal(loc=0, scale=0.01, size=m)   #errors
     breaks1 = np.quantile(y, q=np.linspace(0,1,num=k+1))[1:-1]
     breaks2 = np.arange(y.min(), y.max()+0.1, k)[1:]
     breaks = sorted((breaks1 + breaks2) / 2)
@@ -154,7 +153,7 @@ class Tree:
 #############################################################################
 
 
-X,y = make_data(m=1000, n=5, k=3, seed=188)  #188
+X,y = make_data(m=1000, n=5, k=3, seed=True)  #188
 
 
 from sklearn.tree import DecisionTreeClassifier
